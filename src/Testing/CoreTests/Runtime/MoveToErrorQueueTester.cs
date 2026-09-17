@@ -63,6 +63,40 @@ public class MoveToErrorQueueTester
     }
 
     [Fact]
+    public async Task should_send_a_failure_ack_for_a_solicited_reply_even_on_a_local_destination()
+    {
+        // A caller blocked in InvokeAsync<T> is waiting on this reply, and a local queue is exactly what
+        // the single-node shortcut of a globally partitioned topology delivers to. Without this the
+        // caller sees a TimeoutException instead of the handler's failure. EnableAutomaticFailureAcks
+        // stays off: it governs the UNSOLICITED ack only.
+        theRuntime.Options.EnableAutomaticFailureAcks = false;
+        theEnvelope.Destination = new Uri("local://foo");
+        theEnvelope.ReplyUri = new Uri("local://replies");
+        theEnvelope.ReplyRequested = "some-response";
+
+        await theContinuation.ExecuteAsync(theLifecycle, theRuntime, DateTimeOffset.Now, null);
+
+        await theLifecycle
+            .Received()
+            .SendFailureAcknowledgementAsync($"Moved message {theEnvelope.Id} to the Error Queue.\n{theException}");
+    }
+
+    [Fact]
+    public async Task should_send_a_failure_ack_for_a_requested_acknowledgement_on_a_local_destination()
+    {
+        theRuntime.Options.EnableAutomaticFailureAcks = false;
+        theEnvelope.Destination = new Uri("local://foo");
+        theEnvelope.ReplyUri = new Uri("local://replies");
+        theEnvelope.AckRequested = true;
+
+        await theContinuation.ExecuteAsync(theLifecycle, theRuntime, DateTimeOffset.Now, null);
+
+        await theLifecycle
+            .Received()
+            .SendFailureAcknowledgementAsync($"Moved message {theEnvelope.Id} to the Error Queue.\n{theException}");
+    }
+
+    [Fact]
     public async Task logging_calls()
     {
         await theContinuation.ExecuteAsync(theLifecycle, theRuntime, DateTimeOffset.Now, null);

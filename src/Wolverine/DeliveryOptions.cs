@@ -86,7 +86,16 @@ public class DeliveryOptions
     public string? ContentType { get; set; }
 
     internal bool IsResponse { get; set; }
-    
+
+    /// <summary>
+    ///     Send a single <c>InvokeAsync</c> call through this message type's configured routing instead of
+    ///     executing a local handler inline, awaiting the reply from wherever the route delivers it. With a
+    ///     globally partitioned topology the shard is chosen from the message's group id. Dispatch is
+    ///     immediate and does not enlist in the caller's transaction -- see the "Awaited Typed Replies"
+    ///     section of the partitioning guide.
+    /// </summary>
+    public bool InvokeThroughRouting { get; set; }
+
     /// <summary>
     /// Extra routing information to send to the eventual
     /// Wolverine transport. Mostly built for WebSockets

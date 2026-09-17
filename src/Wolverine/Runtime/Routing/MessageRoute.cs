@@ -242,7 +242,7 @@ public class MessageRoute : IMessageRoute, IMessageInvoker
     }
 
     internal async Task<T> RemoteInvokeAsync<T>(object message, MessageBus bus, CancellationToken cancellation,
-        TimeSpan? timeout, DeliveryOptions? options, string? topicName = null)
+        TimeSpan? timeout, DeliveryOptions? options, string? topicName = null, string? groupId = null)
     {
         if (message == null)
         {
@@ -267,6 +267,15 @@ public class MessageRoute : IMessageRoute, IMessageInvoker
         };
         
         options?.Override(envelope);
+
+        // A partitioned route passes the group id it already resolved. The transports map their native
+        // grouping from this field (Azure Service Bus session id, SQS FIFO message group id, AMQP
+        // group-id), and it has to be set before the envelope rules run. Override() above has already
+        // applied an explicit DeliveryOptions.GroupId, so filling only an empty value keeps that winning.
+        if (envelope.GroupId.IsEmpty())
+        {
+            envelope.GroupId = groupId;
+        }
 
         for (var i = 0; i < Rules.Count; i++)
         {

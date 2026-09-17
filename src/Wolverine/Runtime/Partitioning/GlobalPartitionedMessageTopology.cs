@@ -392,13 +392,18 @@ public class GlobalPartitionedMessageTopology
 
         var externalEndpoints = _externalTopology.Slots.ToArray();
 
+        // Carried alongside the local routes so the request/reply path can read the companion queue's
+        // own GroupShardingSlotNumber when it checks for direct lane re-entry.
+        var localEndpoints = _localTopology?.Slots.ToArray() ?? [];
+
         route = new GlobalPartitionedRoute(
             _externalTopology.Uri,
             runtime.Options.MessagePartitioning,
             externalRoutes,
             localRoutes,
             externalEndpoints,
-            _nativeAcks);
+            _nativeAcks,
+            localEndpoints);
 
         return true;
     }

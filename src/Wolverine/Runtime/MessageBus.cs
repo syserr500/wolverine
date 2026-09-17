@@ -149,7 +149,11 @@ public partial class MessageBus : IMessageBus, IMessageContext
 
         Runtime.AssertHasStarted();
 
-        return Runtime.FindInvoker(message.GetType()).InvokeAsync(message, this, cancellation, timeout, options);
+        var invoker = options.InvokeThroughRouting
+            ? findRoutedInvoker(message.GetType(), options)
+            : Runtime.FindInvoker(message.GetType());
+
+        return invoker.InvokeAsync(message, this, cancellation, timeout, options);
     }
 
     public Task<T> InvokeAsync<T>(object message, DeliveryOptions options, CancellationToken cancellation = default,
@@ -162,7 +166,41 @@ public partial class MessageBus : IMessageBus, IMessageContext
 
         Runtime.AssertHasStarted();
 
-        return Runtime.FindInvoker(message.GetType()).InvokeAsync<T>(message, this, cancellation, timeout, options);
+        var invoker = options.InvokeThroughRouting
+            ? findRoutedInvoker(message.GetType(), options)
+            : Runtime.FindInvoker(message.GetType());
+
+        return invoker.InvokeAsync<T>(message, this, cancellation, timeout, options);
+    }
+
+    /// <summary>
+    /// The message's single configured route, rather than <see cref="IWolverineRuntime.FindInvoker(Type)"/>,
+    /// which deliberately prefers a local handler. Not cached alongside the runtime's invokers, whose
+    /// entries are keyed by message type alone and hold the inline-preferring answer.
+    /// </summary>
+    private IMessageInvoker findRoutedInvoker(Type messageType, DeliveryOptions options)
+    {
+        // The envelope would sit parked until its scheduled time while the caller burned its whole
+        // timeout waiting on it
+        if (options.ScheduledTime.HasValue || options.ScheduleDelay.HasValue)
+        {
+            throw new InvalidOperationException(
+                $"{nameof(DeliveryOptions.InvokeThroughRouting)} cannot be combined with scheduled delivery. "
+                + "The caller would wait out its invocation timeout while the message sits scheduled. Use PublishAsync/SendAsync to schedule a message.");
+        }
+
+        // Throws MultipleSubscribersException when the type fans out, which is correct here: no single
+        // subscriber owns the reply
+        var route = Runtime.RoutingFor(messageType).FindSingleRouteForSending();
+
+        if (route is IMessageInvoker invoker)
+        {
+            return invoker;
+        }
+
+        throw new InvalidOperationException(
+            $"The route for {messageType.FullNameInCode()} ({route.Describe().Endpoint}) is a {route.GetType().Name}, which does not support request/reply invocation. "
+            + $"{nameof(DeliveryOptions.InvokeThroughRouting)} currently supports single external or globally partitioned routes.");
     }
 
     public Task InvokeForTenantAsync(string tenantId, object message, CancellationToken cancellation = default,
@@ -211,6 +249,14 @@ public partial class MessageBus : IMessageBus, IMessageContext
         }
 
         Runtime.AssertHasStarted();
+
+        // Refuse outright rather than silently ignoring the flag and streaming from the local handler the
+        // caller asked to bypass
+        if (options.InvokeThroughRouting)
+        {
+            throw new NotSupportedException(
+                $"{nameof(DeliveryOptions.InvokeThroughRouting)} is not supported for StreamAsync. Streaming is only supported for locally handled messages.");
+        }
 
         return Runtime.FindInvoker(message.GetType()).StreamAsync<TResponse>(message, this, cancellation, options);
     }

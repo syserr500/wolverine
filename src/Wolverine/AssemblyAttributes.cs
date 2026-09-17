@@ -18,6 +18,9 @@ using Wolverine.Attributes;
 [assembly: InternalsVisibleTo("PolicyTests")]
 [assembly: InternalsVisibleTo("CircuitBreakingTests")]
 [assembly: InternalsVisibleTo("Wolverine.ComplianceTests")]
+// The two-node partitioning tests resolve slot endpoints and the slot hash itself, so they cannot drift
+// from the implementation they are asserting about.
+[assembly: InternalsVisibleTo("SlowTests")]
 [assembly: InternalsVisibleTo("Wolverine.AI")]
 [assembly: InternalsVisibleTo("Wolverine.AI.Tests")]
 [assembly: InternalsVisibleTo("Wolverine.RabbitMq")]
